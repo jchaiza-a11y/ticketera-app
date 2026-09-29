@@ -5,10 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Lock, Minus, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { PurchaseSteps } from "@/components/shared/PurchaseSteps";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatEventDate, formatPrice, type Event } from "@/modules/events";
+import { useOrderStore } from "@/modules/orders";
 import {
   MAX_TICKETS_PER_ORDER,
   type VenueMap,
@@ -21,8 +23,6 @@ import {
   type SelectionSummary,
 } from "../utils/seatSelection";
 import { SeatMap } from "./SeatMap";
-
-const STEPS = ["Entradas", "Datos y pago", "Confirmación"];
 
 const ZONE_TONES = [
   { fill: "fill-primary", text: "fill-primary-foreground", swatch: "bg-primary" },
@@ -41,8 +41,7 @@ const STATUS_BADGES = {
   "sold-out": { label: "Agotado", className: "bg-destructive text-white" },
 } as const;
 
-const CTA_CLASS =
-  "h-12 w-full gap-2 rounded-xl text-base bg-brand-accent text-brand-accent-foreground hover:bg-brand-accent/90";
+const CTA_CLASS = "h-12 w-full gap-2 rounded-xl text-base";
 
 function getZoneTones(zones: Zone[]) {
   let index = 0;
@@ -192,9 +191,16 @@ interface OrderSummaryProps {
   currency: string;
   checkoutHref: string;
   onClear: () => void;
+  onContinue: () => void;
 }
 
-function OrderSummary({ summary, currency, checkoutHref, onClear }: OrderSummaryProps) {
+function OrderSummary({
+  summary,
+  currency,
+  checkoutHref,
+  onClear,
+  onContinue,
+}: OrderSummaryProps) {
   const isEmpty = summary.count === 0;
 
   return (
@@ -243,7 +249,7 @@ function OrderSummary({ summary, currency, checkoutHref, onClear }: OrderSummary
         </span>
       </div>
 
-      <CheckoutButton href={checkoutHref} disabled={isEmpty} />
+      <CheckoutButton href={checkoutHref} disabled={isEmpty} onContinue={onContinue} />
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Lock className="size-3.5" />
         Compra segura · Máximo {MAX_TICKETS_PER_ORDER} entradas por compra
@@ -252,19 +258,30 @@ function OrderSummary({ summary, currency, checkoutHref, onClear }: OrderSummary
   );
 }
 
-function CheckoutButton({ href, disabled }: { href: string; disabled: boolean }) {
+interface CheckoutButtonProps {
+  href: string;
+  disabled: boolean;
+  onContinue: () => void;
+}
+
+function CheckoutButton({ href, disabled, onContinue }: CheckoutButtonProps) {
   if (disabled) {
     return (
-      <Button disabled className={CTA_CLASS}>
+      <Button variant="cta" disabled className={CTA_CLASS}>
         Continuar
       </Button>
     );
   }
   return (
-    <Link href={href} className={cn(buttonVariants(), CTA_CLASS)}>
+    <Button
+      variant="cta"
+      className={CTA_CLASS}
+      nativeButton={false}
+      render={<Link href={href} onClick={onContinue} />}
+    >
       Continuar
       <ArrowRight className="size-5" />
-    </Link>
+    </Button>
   );
 }
 
@@ -284,6 +301,8 @@ export function TicketSelection({ event, venue }: TicketSelectionProps) {
   const activeZone = venue.zones.find((zone) => zone.id === activeZoneId) ?? null;
   const eventHref = `/events/${event.slug}`;
   const checkoutHref = `${eventHref}/checkout`;
+  const startCheckout = () =>
+    useOrderStore.getState().startCheckout(event.slug, event.currency, summary);
 
   const pickZone = (zone: Zone) => {
     setActiveZoneId(zone.id);
@@ -316,30 +335,7 @@ export function TicketSelection({ event, venue }: TicketSelectionProps) {
           <ArrowLeft className="size-4" />
           Volver al evento
         </Link>
-        <p className="text-sm font-medium text-muted-foreground md:hidden">Paso 1 de 3</p>
-        <ol aria-label="Pasos de la compra" className="hidden items-center gap-3 text-sm md:flex">
-          {STEPS.map((step, index) => (
-            <li
-              key={step}
-              aria-current={index === 0 ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-2",
-                index === 0 ? "font-semibold" : "text-muted-foreground",
-              )}
-            >
-              {index > 0 && <span aria-hidden="true" className="mr-1 h-px w-8 bg-border" />}
-              <span
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-xs",
-                  index === 0 ? "bg-foreground text-background" : "border-2",
-                )}
-              >
-                {index + 1}
-              </span>
-              {step}
-            </li>
-          ))}
-        </ol>
+        <PurchaseSteps current={1} />
       </div>
 
       <header className="mt-4 flex items-center gap-4">
@@ -478,6 +474,7 @@ export function TicketSelection({ event, venue }: TicketSelectionProps) {
             currency={event.currency}
             checkoutHref={checkoutHref}
             onClear={() => dispatch({ type: "clear" })}
+            onContinue={startCheckout}
           />
         </aside>
       </div>
@@ -493,7 +490,11 @@ export function TicketSelection({ event, venue }: TicketSelectionProps) {
             </span>
           </div>
           <div className="ml-auto w-44">
-            <CheckoutButton href={checkoutHref} disabled={summary.count === 0} />
+            <CheckoutButton
+              href={checkoutHref}
+              disabled={summary.count === 0}
+              onContinue={startCheckout}
+            />
           </div>
         </div>
       </div>
