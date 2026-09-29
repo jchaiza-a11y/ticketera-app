@@ -117,15 +117,25 @@ interface TextFieldProps extends ComponentProps<typeof Input> {
   className?: string;
 }
 
-function TextField({ name, label, error, className, ...inputProps }: TextFieldProps) {
+function RequiredMark() {
+  return (
+    <span aria-hidden="true" className="ml-0.5 text-destructive">
+      *
+    </span>
+  );
+}
+
+function TextField({ name, label, error, className, required, ...inputProps }: TextFieldProps) {
   const id = fieldId(name);
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <label htmlFor={id} className="text-sm font-medium">
         {label}
+        {required && <RequiredMark />}
       </label>
       <Input
         id={id}
+        aria-required={required || undefined}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
         className="h-11 rounded-xl bg-card text-base md:text-sm"
@@ -358,10 +368,11 @@ export function Checkout({ event }: CheckoutProps) {
         <form id={FORM_ID} noValidate onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-6">
           <Section
             title="Datos del comprador"
-            description="Enviaremos tus entradas al correo que indiques."
+            description="Enviaremos tus entradas al correo que indiques. Los campos con * son obligatorios."
           >
             <div className="grid gap-5 md:grid-cols-2">
               <TextField
+                required
                 name="buyer.fullName"
                 label="Nombre completo"
                 autoComplete="name"
@@ -371,6 +382,7 @@ export function Checkout({ event }: CheckoutProps) {
                 onChange={(e) => updateBuyer({ fullName: e.target.value })}
               />
               <TextField
+                required
                 name="buyer.email"
                 label="Correo electrónico"
                 type="email"
@@ -383,6 +395,7 @@ export function Checkout({ event }: CheckoutProps) {
               <div className="flex flex-col gap-2">
                 <label htmlFor={fieldId("buyer.documentNumber")} className="text-sm font-medium">
                   Documento de identidad
+                  <RequiredMark />
                 </label>
                 <div className="flex gap-2">
                   <Select
@@ -407,6 +420,7 @@ export function Checkout({ event }: CheckoutProps) {
                   </Select>
                   <Input
                     id={fieldId("buyer.documentNumber")}
+                    aria-required
                     inputMode={buyer.documentType === "PASAPORTE" ? "text" : "numeric"}
                     placeholder="Número"
                     value={buyer.documentNumber}
@@ -426,6 +440,7 @@ export function Checkout({ event }: CheckoutProps) {
                 />
               </div>
               <TextField
+                required
                 name="buyer.phone"
                 label="Celular"
                 type="tel"
@@ -461,6 +476,7 @@ export function Checkout({ event }: CheckoutProps) {
             {method === "card" ? (
               <div className="grid gap-5 md:grid-cols-4">
                 <TextField
+                  required
                   name="payment.cardNumber"
                   label="Número de tarjeta"
                   className="md:col-span-2"
@@ -472,6 +488,7 @@ export function Checkout({ event }: CheckoutProps) {
                   onChange={(e) => updateCard({ cardNumber: formatCardNumber(e.target.value) })}
                 />
                 <TextField
+                  required
                   name="payment.expiry"
                   label="Vencimiento"
                   inputMode="numeric"
@@ -482,6 +499,7 @@ export function Checkout({ event }: CheckoutProps) {
                   onChange={(e) => updateCard({ expiry: formatExpiry(e.target.value) })}
                 />
                 <TextField
+                  required
                   name="payment.cvv"
                   label="CVV"
                   inputMode="numeric"
@@ -492,6 +510,7 @@ export function Checkout({ event }: CheckoutProps) {
                   onChange={(e) => updateCard({ cvv: e.target.value.replace(/\D/g, "").slice(0, 4) })}
                 />
                 <TextField
+                  required
                   name="payment.cardName"
                   label="Nombre en la tarjeta"
                   className="md:col-span-4"

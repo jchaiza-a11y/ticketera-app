@@ -144,6 +144,7 @@ describe("getSelectionSummary", () => {
           zoneId: "west",
           zoneName: "Tribuna Occidente",
           detail: "Fila C · 12",
+          seatLabels: ["Fila C · 12"],
           quantity: 1,
           amount: 380,
         },
@@ -160,6 +161,7 @@ describe("getSelectionSummary", () => {
 
     const [line] = getSelectionSummary(state, VENUE_MAP).lines;
     expect(line.detail).toBe("Fila C · 5, 12 · Fila D · 4");
+    expect(line.seatLabels).toEqual(["Fila C · 5", "Fila C · 12", "Fila D · 4"]);
     expect(line.amount).toBe(380 * 3);
   });
 });

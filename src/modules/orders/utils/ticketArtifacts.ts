@@ -1,51 +1,21 @@
-export const QR_SIZE = 21;
-const FINDER_SIZE = 7;
+import QRCode from "qrcode";
+import type { Order } from "../store/order.store";
+
 const EVENT_DURATION_MS = 3 * 60 * 60 * 1000;
 
-const FINDER_ORIGINS = [
-  [0, 0],
-  [0, QR_SIZE - FINDER_SIZE],
-  [QR_SIZE - FINDER_SIZE, 0],
-] as const;
-
-function hashSeed(seed: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    hash ^= seed.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
+export interface OrderTicket {
+  number: number;
+  total: number;
+  zoneName: string;
+  detail: string;
 }
 
-// Returns null outside the finder zones (marks plus their one-cell light border).
-function finderCell(row: number, col: number): boolean | null {
-  for (const [originRow, originCol] of FINDER_ORIGINS) {
-    const r = row - originRow;
-    const c = col - originCol;
-    if (r < -1 || r > FINDER_SIZE || c < -1 || c > FINDER_SIZE) continue;
-    const inside = r >= 0 && r < FINDER_SIZE && c >= 0 && c < FINDER_SIZE;
-    const ring = r === 0 || r === FINDER_SIZE - 1 || c === 0 || c === FINDER_SIZE - 1;
-    const core = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-    return inside && (ring || core);
-  }
-  return null;
+export interface TicketQr {
+  size: number;
+  modules: boolean[];
 }
 
-// Decorative QR-like pattern, not a scannable code: there is no backend payload to encode yet.
-export function buildQrPattern(seed: string): boolean[] {
-  let state = hashSeed(seed);
-  const next = () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 2 ** 32;
-  };
-
-  return Array.from({ length: QR_SIZE * QR_SIZE }, (_, index) => {
-    const fixed = finderCell(Math.floor(index / QR_SIZE), index % QR_SIZE);
-    return fixed ?? next() > 0.5;
-  });
-}
-
-interface IcsEventInput {
+interface CalendarEventInput {
   title: string;
   startsAt: string;
   venue: string;
@@ -53,14 +23,51 @@ interface IcsEventInput {
   orderId: string;
 }
 
+export function expandTickets(order: Order): OrderTicket[] {
+  const tickets = order.lines.flatMap((line) =>
+    Array.from({ length: line.quantity }, (_, index) => ({
+      zoneName: line.zoneName,
+      detail: line.seatLabels?.[index] ?? line.detail,
+    })),
+  );
+  return tickets.map((ticket, index) => ({ ...ticket, number: index + 1, total: tickets.length }));
+}
+
+// No backend validates it yet; the payload carries what a door scanner would need to look the ticket up.
+export function buildTicketPayload(order: Order, ticket: OrderTicket): string {
+  return [
+    "TICKETERA",
+    order.id,
+    `${ticket.number}/${ticket.total}`,
+    order.eventSlug,
+    ticket.zoneName,
+    ticket.detail,
+  ].join("|");
+}
+
+export function buildTicketQr(payload: string): TicketQr {
+  const { modules } = QRCode.create(payload, { errorCorrectionLevel: "M" });
+  return {
+    size: modules.size,
+    modules: Array.from(modules.data, (cell) => cell === 1),
+  };
+}
+
 const toIcsDate = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
 const escapeIcsText = (value: string) =>
   value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 
-export function buildIcsEvent(event: IcsEventInput, now: Date = new Date()): string {
-  const start = new Date(event.startsAt);
-  const end = new Date(start.getTime() + EVENT_DURATION_MS);
+const getEventRange = (startsAt: string) => {
+  const start = new Date(startsAt);
+  return { start, end: new Date(start.getTime() + EVENT_DURATION_MS) };
+};
+
+const describeOrder = (orderId: string) =>
+  `Pedido N.º ${orderId}. Muestra tu QR en el ingreso.`;
+
+export function buildIcsEvent(event: CalendarEventInput, now: Date = new Date()): string {
+  const { start, end } = getEventRange(event.startsAt);
 
   return [
     "BEGIN:VCALENDAR",
@@ -74,9 +81,26 @@ export function buildIcsEvent(event: IcsEventInput, now: Date = new Date()): str
     `DTEND:${toIcsDate(end)}`,
     `SUMMARY:${escapeIcsText(event.title)}`,
     `LOCATION:${escapeIcsText(`${event.venue}, ${event.city}`)}`,
-    `DESCRIPTION:${escapeIcsText(`Pedido N.º ${event.orderId}. Muestra tu QR en el ingreso.`)}`,
+    `DESCRIPTION:${escapeIcsText(describeOrder(event.orderId))}`,
     "END:VEVENT",
     "END:VCALENDAR",
     "",
   ].join("\r\n");
+}
+
+// A data URL on a real <a download> works in every browser; iOS Safari opens it in Calendar.
+export function buildIcsDataUrl(event: CalendarEventInput, now: Date = new Date()): string {
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(buildIcsEvent(event, now))}`;
+}
+
+export function buildGoogleCalendarUrl(event: CalendarEventInput): string {
+  const { start, end } = getEventRange(event.startsAt);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: event.title,
+    dates: `${toIcsDate(start)}/${toIcsDate(end)}`,
+    location: `${event.venue}, ${event.city}`,
+    details: describeOrder(event.orderId),
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }

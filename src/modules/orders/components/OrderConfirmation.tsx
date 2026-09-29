@@ -10,6 +10,8 @@ import {
   ChevronRight,
   CircleCheck,
   Download,
+  ExternalLink,
+  Loader2,
   Mail,
   QrCode,
   SearchX,
@@ -25,7 +27,13 @@ import {
   type Event,
 } from "@/modules/events";
 import { useOrderHydrated, useOrderStore, type Order } from "../store/order.store";
-import { buildIcsEvent, buildQrPattern, QR_SIZE } from "../utils/ticketArtifacts";
+import {
+  buildGoogleCalendarUrl,
+  buildIcsDataUrl,
+  buildTicketPayload,
+  buildTicketQr,
+  expandTickets,
+} from "../utils/ticketArtifacts";
 
 const NEXT_STEPS = [
   {
@@ -45,22 +53,22 @@ const NEXT_STEPS = [
   },
 ];
 
-function QrPattern({ seed, label }: { seed: string; label: string }) {
-  const cells = buildQrPattern(seed);
+function TicketQrCode({ payload, label }: { payload: string; label: string }) {
+  const qr = buildTicketQr(payload);
   return (
     <svg
-      viewBox={`0 0 ${QR_SIZE} ${QR_SIZE}`}
+      viewBox={`-2 -2 ${qr.size + 4} ${qr.size + 4}`}
       role="img"
       aria-label={label}
       shapeRendering="crispEdges"
-      className="size-32 rounded-md bg-white p-1"
+      className="size-40 rounded-lg bg-white"
     >
-      {cells.map((dark, index) =>
+      {qr.modules.map((dark, index) =>
         dark ? (
           <rect
             key={index}
-            x={index % QR_SIZE}
-            y={Math.floor(index / QR_SIZE)}
+            x={index % qr.size}
+            y={Math.floor(index / qr.size)}
             width={1}
             height={1}
             className="fill-foreground"
@@ -71,20 +79,10 @@ function QrPattern({ seed, label }: { seed: string; label: string }) {
   );
 }
 
-function downloadCalendarFile(event: Event, order: Order) {
-  const ics = buildIcsEvent({
-    title: event.title,
-    startsAt: event.startsAt,
-    venue: event.venue,
-    city: event.city,
-    orderId: order.id,
-  });
-  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${event.slug}.ics`;
-  link.click();
-  URL.revokeObjectURL(url);
+async function downloadPdf(order: Order, event: Event) {
+  // jsPDF is ~300 kB; it only loads when someone actually asks for the file.
+  const { buildTicketsPdf, getTicketsPdfFileName } = await import("../utils/ticketsPdf");
+  buildTicketsPdf(order, event).save(getTicketsPdfFileName(order));
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -104,6 +102,7 @@ export function OrderConfirmation({ event }: OrderConfirmationProps) {
   const hydrated = useOrderHydrated();
   const order = useOrderStore((state) => state.lastOrder);
   const [ticketIndex, setTicketIndex] = useState(0);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   if (!hydrated) {
     return <div className="mx-auto min-h-[60vh] w-full max-w-4xl" aria-busy="true" />;
@@ -128,12 +127,27 @@ export function OrderConfirmation({ event }: OrderConfirmationProps) {
     );
   }
 
-  const tickets = order.lines.flatMap((line) =>
-    Array.from({ length: line.quantity }, () => line),
-  );
+  const tickets = expandTickets(order);
   const current = Math.min(ticketIndex, tickets.length - 1);
+  const ticket = tickets[current];
   const zones = [...new Set(order.lines.map((line) => line.zoneName))].join(", ");
-  const ticketLabel = `Entrada ${current + 1} de ${tickets.length}`;
+  const ticketLabel = `Entrada ${ticket.number} de ${ticket.total}`;
+  const calendarEvent = {
+    title: event.title,
+    startsAt: event.startsAt,
+    venue: event.venue,
+    city: event.city,
+    orderId: order.id,
+  };
+
+  const handleDownloadPdf = async () => {
+    setGeneratingPdf(true);
+    try {
+      await downloadPdf(order, event);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8 px-4 pb-16 pt-6 sm:px-6 md:pt-8">
@@ -179,36 +193,46 @@ export function OrderConfirmation({ event }: OrderConfirmationProps) {
           </div>
         </div>
 
-        <div className="relative flex shrink-0 flex-col items-center justify-center gap-3 border-t-2 border-dashed p-6 md:w-56 md:border-l-2 md:border-t-0">
+        <div className="relative flex shrink-0 flex-col items-center justify-center gap-3 border-t-2 border-dashed p-6 md:w-64 md:border-l-2 md:border-t-0">
           <span aria-hidden="true" className="absolute -left-3 -top-3 size-6 rounded-full border bg-background md:-top-3" />
           <span aria-hidden="true" className="absolute -right-3 -top-3 size-6 rounded-full border bg-background md:-bottom-3 md:-left-3 md:right-auto md:top-auto" />
-          <QrPattern seed={`${order.id}-${current + 1}`} label={`Código QR de la entrada ${current + 1} de ${tickets.length}`} />
+          <TicketQrCode
+            payload={buildTicketPayload(order, ticket)}
+            label={`Código QR de la entrada ${ticket.number} de ${ticket.total}`}
+          />
           <p className="text-center text-sm">
-            <span className="block font-medium">{tickets[current].zoneName}</span>
-            <span className="text-muted-foreground">{tickets[current].detail}</span>
+            <span className="block font-medium">{ticket.zoneName}</span>
+            <span className="text-muted-foreground">{ticket.detail}</span>
           </p>
-          <div className="flex items-center gap-1 print:hidden">
-            <Button
-              variant="ghost"
-              className="size-11"
-              aria-label="Entrada anterior"
-              disabled={current === 0}
-              onClick={() => setTicketIndex(current - 1)}
+          <div className="flex w-full items-center justify-between gap-1 print:hidden">
+            {tickets.length > 1 && (
+              <Button
+                variant="ghost"
+                className="size-10 shrink-0"
+                aria-label="Entrada anterior"
+                disabled={current === 0}
+                onClick={() => setTicketIndex(current - 1)}
+              >
+                <ChevronLeft className="size-5" />
+              </Button>
+            )}
+            <span
+              aria-live="polite"
+              className="flex-1 whitespace-nowrap text-center text-sm font-medium text-muted-foreground"
             >
-              <ChevronLeft className="size-5" />
-            </Button>
-            <span aria-live="polite" className="whitespace-nowrap px-1 text-center text-sm text-muted-foreground">
               {ticketLabel}
             </span>
-            <Button
-              variant="ghost"
-              className="size-11"
-              aria-label="Entrada siguiente"
-              disabled={current === tickets.length - 1}
-              onClick={() => setTicketIndex(current + 1)}
-            >
-              <ChevronRight className="size-5" />
-            </Button>
+            {tickets.length > 1 && (
+              <Button
+                variant="ghost"
+                className="size-10 shrink-0"
+                aria-label="Entrada siguiente"
+                disabled={current === tickets.length - 1}
+                onClick={() => setTicketIndex(current + 1)}
+              >
+                <ChevronRight className="size-5" />
+              </Button>
+            )}
           </div>
         </div>
       </article>
@@ -218,15 +242,39 @@ export function OrderConfirmation({ event }: OrderConfirmationProps) {
           Ver mis entradas
           <ArrowRight className="size-5" />
         </Button>
-        <Button variant="outline" className="h-12 gap-2 px-5" onClick={() => downloadCalendarFile(event, order)}>
+        <Button
+          variant="outline"
+          className="h-12 gap-2 px-5"
+          nativeButton={false}
+          render={
+            <a
+              href={buildIcsDataUrl(calendarEvent, new Date(order.createdAt))}
+              download={`${event.slug}.ics`}
+            />
+          }
+        >
           <CalendarPlus className="size-5" />
           Agregar al calendario
         </Button>
-        <Button variant="outline" className="h-12 gap-2 px-5" onClick={() => window.print()}>
-          <Download className="size-5" />
-          Descargar PDF
+        <Button
+          variant="outline"
+          className="h-12 gap-2 px-5"
+          disabled={generatingPdf}
+          onClick={handleDownloadPdf}
+        >
+          {generatingPdf ? <Loader2 className="size-5 animate-spin" /> : <Download className="size-5" />}
+          {generatingPdf ? "Generando…" : "Descargar PDF"}
         </Button>
       </div>
+      <a
+        href={buildGoogleCalendarUrl(calendarEvent)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="-mt-5 flex items-center gap-1.5 text-sm font-medium text-primary hover:underline print:hidden"
+      >
+        ¿Usas Google Calendar? Agrégalo aquí
+        <ExternalLink className="size-3.5" />
+      </a>
 
       <ol className="grid w-full gap-4 md:grid-cols-3 print:hidden">
         {NEXT_STEPS.map(({ icon: Icon, title, text }) => (

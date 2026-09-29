@@ -19,6 +19,8 @@ export interface SelectionLine {
   zoneId: string;
   zoneName: string;
   detail: string;
+  // One label per seat ("Fila C · 12") so each ticket can carry its own seat.
+  seatLabels?: string[];
   quantity: number;
   amount: number;
 }
@@ -88,6 +90,9 @@ export function seatSelectionReducer(
   }
 }
 
+const sortSeats = (seats: Seat[]) =>
+  [...seats].sort((a, b) => a.row.localeCompare(b.row) || a.number - b.number);
+
 function describeSeats(seats: Seat[]): string {
   const byRow = new Map<string, number[]>();
   for (const seat of seats) {
@@ -126,6 +131,7 @@ export function getSelectionSummary(
         zoneId: zone.id,
         zoneName: zone.name,
         detail: describeSeats(seats),
+        seatLabels: sortSeats(seats).map((seat) => `Fila ${seat.row} · ${seat.number}`),
         quantity: seats.length,
         amount: seats.length * zone.price,
       },
