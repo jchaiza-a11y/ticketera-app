@@ -26,12 +26,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-screen bg-gradient-to-b from-primary/25 via-primary/10 to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-screen bg-gradient-to-b from-primary/25 via-primary/10 to-transparent print:hidden"
         />
-        <Navbar />
-        <SearchTopbar />
+        <div className="contents print:hidden">
+          <Navbar />
+          <SearchTopbar />
+        </div>
         <main className="flex-1">{children}</main>
-        <Footer />
+        <div className="contents print:hidden">
+          <Footer />
+        </div>
       </body>
     </html>
   );
