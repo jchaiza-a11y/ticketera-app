@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { formatEventDate, formatPrice } from "./events.utils";
+import {
+  formatEventDate,
+  formatEventLongDate,
+  formatEventTime,
+  formatPrice,
+} from "./events.utils";
+
+describe("formatEventTime and formatEventLongDate", () => {
+  it("format time and long date in Lima time", () => {
+    expect(formatEventTime("2026-11-15T20:00:00-05:00")).toBe("8:00 p. m.");
+    expect(formatEventTime("2026-11-16T02:00:00Z")).toBe("9:00 p. m.");
+    expect(formatEventLongDate("2026-11-15T20:00:00-05:00")).toBe("domingo 15 de noviembre");
+  });
+});
 
 describe("formatPrice", () => {
   it("formats soles with symbol and two decimals", () => {

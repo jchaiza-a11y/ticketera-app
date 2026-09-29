@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { EVENTS } from "@/modules/events";
-import { TicketSelection, VENUE_MAP } from "@/modules/tickets";
+import { getVenueMapForEvent, TicketSelection } from "@/modules/tickets";
 
 const findEvent = (slug: string) => EVENTS.find((event) => event.slug === slug);
 
@@ -22,5 +22,5 @@ export default async function TicketsPage({
   const event = findEvent((await params).slug);
   if (!event) notFound();
 
-  return <TicketSelection event={event} venue={VENUE_MAP} />;
+  return <TicketSelection event={event} venue={getVenueMapForEvent(event)} />;
 }
