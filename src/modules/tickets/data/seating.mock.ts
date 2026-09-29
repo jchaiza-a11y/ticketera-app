@@ -5,6 +5,9 @@ const SEATS_PER_ROW = 20;
 const SEAT_SPACING = 24;
 const ROW_SPACING = 28;
 const ROW_CURVE = 0.2;
+// Aisles after seats 5 and 15 split every row into 5 | 10 | 5 blocks.
+export const AISLES_AFTER = [5, 15];
+const AISLE_WIDTH = 22;
 
 // Deterministic pattern instead of Math.random so SSR and client render the same map.
 const isOccupied = (rowIndex: number, number: number) =>
@@ -16,12 +19,13 @@ function buildSeatedZone(zoneId: string): Seat[] {
     Array.from({ length: SEATS_PER_ROW }, (_, i) => {
       const number = i + 1;
       const offset = number - center;
+      const aisles = AISLES_AFTER.filter((after) => number > after).length;
       return {
         id: `${zoneId}-${row}-${number}`,
         zoneId,
         row,
         number,
-        x: offset * SEAT_SPACING,
+        x: offset * SEAT_SPACING + (aisles - AISLES_AFTER.length / 2) * AISLE_WIDTH,
         y: rowIndex * ROW_SPACING + ROW_CURVE * offset * offset,
         status: isOccupied(rowIndex, number) ? "occupied" : "available",
       } satisfies Seat;

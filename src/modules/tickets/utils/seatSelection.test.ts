@@ -32,6 +32,15 @@ const toggle = (state: SeatSelectionState, s: Seat) =>
   seatSelectionReducer(state, { type: "toggleSeat", seat: s, zone: zone(s.zoneId) });
 
 describe("VENUE_MAP", () => {
+  it("leaves an aisle after seats 5 and 15 without changing seat ids", () => {
+    const row = VENUE_MAP.seats.filter((s) => s.zoneId === "west" && s.row === "A");
+    const gap = (n: number) => row[n].x - row[n - 1].x; // between seat n and n + 1
+    expect(gap(5)).toBeGreaterThan(gap(4) + 10);
+    expect(gap(15)).toBeGreaterThan(gap(14) + 10);
+    expect(gap(10)).toBe(gap(4));
+    expect(row.map((s) => s.id)).toEqual(row.map((s) => `west-A-${s.number}`));
+  });
+
   it("passes the schema with 2 general and 3 seated zones", () => {
     expect(() => venueMapSchema.parse(VENUE_MAP)).not.toThrow();
     expect(VENUE_MAP.zones).toHaveLength(5);
