@@ -33,19 +33,6 @@ export const buyerSchema = z
     }
   });
 
-function passesLuhn(digits: string): boolean {
-  let sum = 0;
-  for (let i = 0; i < digits.length; i++) {
-    let digit = Number(digits[digits.length - 1 - i]);
-    if (i % 2 === 1) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-    sum += digit;
-  }
-  return sum % 10 === 0;
-}
-
 function isFutureExpiry(expiry: string): boolean {
   const [month, year] = expiry.split("/").map(Number);
   const now = new Date();
@@ -58,8 +45,9 @@ const cardPaymentSchema = z.object({
   cardNumber: z
     .string()
     .transform((value) => value.replace(/\s+/g, ""))
-    .refine((value) => /^\d{13,19}$/.test(value) && passesLuhn(value), {
-      message: "Revisa el número de la tarjeta",
+    // Payments are simulated, so any 13-19 digit number is accepted (no Luhn check).
+    .refine((value) => /^\d{13,19}$/.test(value), {
+      message: "Ingresa un número de tarjeta de 13 a 19 dígitos",
     }),
   expiry: z
     .string()

@@ -60,8 +60,8 @@ describe("paymentSchema", () => {
   });
 
   it.each([
-    ["cardNumber", { cardNumber: "4111 1111 1111 1112" }],
     ["cardNumber", { cardNumber: "4111" }],
+    ["cardNumber", { cardNumber: "4111 1111 abcd 1111" }],
     ["expiry", { expiry: "01/20" }],
     ["expiry", { expiry: "13/40" }],
     ["cvv", { cvv: "12" }],
@@ -69,6 +69,10 @@ describe("paymentSchema", () => {
     const result = paymentSchema.safeParse({ ...validCard, ...patch });
     expect(result.success).toBe(false);
     if (!result.success) expect(getFieldErrors(result.error)).toHaveProperty(field);
+  });
+
+  it("accepts any 13 to 19 digit number because the payment is simulated", () => {
+    expect(paymentSchema.safeParse({ ...validCard, cardNumber: "1234 5678 1234 5678" }).success).toBe(true);
   });
 
   it("does not ask for card data with Yape or PagoEfectivo", () => {

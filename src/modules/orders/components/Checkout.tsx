@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clock,
   CreditCard,
+  FlaskConical,
   Loader2,
   Lock,
   ShoppingBag,
@@ -70,6 +71,22 @@ const EMPTY_BUYER: Buyer = {
 };
 
 const EMPTY_CARD = { cardNumber: "", expiry: "", cvv: "", cardName: "" };
+
+// Nothing is charged: these values let anyone run the flow end to end in one click.
+const TEST_BUYER: Buyer = {
+  fullName: "María Quispe",
+  email: "maria.quispe@correo.pe",
+  documentType: "DNI",
+  documentNumber: "45678912",
+  phone: "987654321",
+};
+
+const TEST_CARD = {
+  cardNumber: "4111 1111 1111 1111",
+  expiry: "12/30",
+  cvv: "123",
+  cardName: "MARIA QUISPE",
+};
 
 const fieldId = (key: string) => `checkout-${key.replace(/\./g, "-")}`;
 
@@ -241,6 +258,16 @@ function PayButton({ total, disabled, processing, className }: PayButtonProps) {
   );
 }
 
+function ErrorSummary({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p role="alert" className="text-center text-sm font-medium text-destructive">
+      {count === 1 ? "Hay 1 campo por corregir." : `Hay ${count} campos por corregir.`} Revisa los
+      marcados en rojo.
+    </p>
+  );
+}
+
 function EmptyCheckout({ ticketsHref, expired }: { ticketsHref: string; expired: boolean }) {
   return (
     <Card className="mx-auto mt-8 max-w-lg items-center gap-3 rounded-2xl px-6 py-12 text-center">
@@ -330,6 +357,15 @@ export function Checkout({ event }: CheckoutProps) {
   };
 
   const paymentNote = PAYMENT_NOTES[method];
+  const errorCount = Object.keys(errors).length;
+
+  const fillTestData = () => {
+    setBuyer(TEST_BUYER);
+    setCard(TEST_CARD);
+    setMethod("card");
+    setAcceptedTerms(true);
+    setErrors({});
+  };
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 md:pt-8 lg:px-8">
@@ -366,6 +402,16 @@ export function Checkout({ event }: CheckoutProps) {
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-8">
         <form id={FORM_ID} noValidate onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-6">
+          <div className="flex flex-col gap-3 rounded-2xl border border-primary/25 bg-accent p-4 sm:flex-row sm:items-center">
+            <FlaskConical className="size-5 shrink-0 text-primary" />
+            <p className="flex-1 text-sm">
+              <span className="font-semibold">Pago simulado.</span> No se realiza ningún cobro:
+              puedes usar cualquier tarjeta de 13 a 19 dígitos o completar todo con datos de prueba.
+            </p>
+            <Button type="button" variant="outline" className="h-10 shrink-0 px-4" onClick={fillTestData}>
+              Completar con datos de prueba
+            </Button>
+          </div>
           <Section
             title="Datos del comprador"
             description="Enviaremos tus entradas al correo que indiques. Los campos con * son obligatorios."
@@ -557,6 +603,7 @@ export function Checkout({ event }: CheckoutProps) {
 
           <div className="flex flex-col gap-2 lg:hidden">
             <PayButton total={total} disabled={!acceptedTerms} processing={processing} />
+            <ErrorSummary count={errorCount} />
             {!acceptedTerms && (
               <p className="text-center text-sm text-muted-foreground">
                 Acepta los términos para continuar.
@@ -569,6 +616,7 @@ export function Checkout({ event }: CheckoutProps) {
           <Card className="gap-5 rounded-2xl p-6 shadow-md">
             <OrderSummaryCard event={event} draft={draft} ticketsHref={ticketsHref} />
             <PayButton total={total} disabled={!acceptedTerms} processing={processing} />
+            <ErrorSummary count={errorCount} />
             <p className="-mt-2 text-center text-sm text-muted-foreground">
               {acceptedTerms ? "Pago 100 % seguro" : "Acepta los términos para continuar."}
             </p>
